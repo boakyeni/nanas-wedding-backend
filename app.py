@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+CORS(app, resources={r"/*": {"origins": ["https://nanas-wedding.vercel.app", "http://localhost:3000"]}})  # Enable CORS for all routes
 
 # Database connection function
 def get_db_connection():
@@ -23,30 +23,30 @@ def get_db_connection():
     return conn
 
 # Initialize the database table if it doesn't exist
-def initialize_db():
-    conn = get_db_connection()
-    cur = conn.cursor()
+# def initialize_db():
+#     conn = get_db_connection()
+#     cur = conn.cursor()
     
-    # Create table if it doesn't exist
-    cur.execute('''
-    CREATE TABLE IF NOT EXISTS rsvp (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        email VARCHAR(255) NOT NULL,
-        attending BOOLEAN NOT NULL,
-        plus_one BOOLEAN,
-        plus_one_name VARCHAR(255),
-        dietary_restrictions TEXT,
-        message TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    ''')
+#     # Create table if it doesn't exist
+#     cur.execute('''
+#     CREATE TABLE IF NOT EXISTS rsvp (
+#         id SERIAL PRIMARY KEY,
+#         name VARCHAR(255) NOT NULL,
+#         email VARCHAR(255) NOT NULL,
+#         attending BOOLEAN NOT NULL,
+#         plus_one BOOLEAN,
+#         plus_one_name VARCHAR(255),
+#         dietary_restrictions TEXT,
+#         message TEXT,
+#         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+#     )
+#     ''')
     
-    cur.close()
-    conn.close()
+#     cur.close()
+#     conn.close()
 
-# Initialize database on startup
-initialize_db()
+# # Initialize database on startup
+# initialize_db()
 
 @app.route('/rsvp', methods=['POST'])
 def submit_rsvp():
@@ -74,7 +74,7 @@ def submit_rsvp():
         cur = conn.cursor()
         
         cur.execute(
-            'INSERT INTO rsvp (name, email, attending, plus_one, plus_one_name, dietary_restrictions, message) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id',
+            'INSERT INTO rsvp (name, email, attending, plus_one, plus_one_name, dietary_restrictions, message) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id',
             (data['name'], data['email'], data['attending'], plus_one, plus_one_name, dietary_restrictions, message)
         )
         
@@ -131,7 +131,7 @@ def get_rsvps():
         return jsonify({'error': 'An error occurred retrieving RSVPs'}), 500
 
 # Health check endpoint
-@app.route('/api/health', methods=['GET'])
+@app.route('/health', methods=['GET'])
 def health_check():
     return jsonify({'status': 'healthy'}), 200
 
