@@ -83,7 +83,7 @@ def submit_rsvp():
     
     except Exception as e:
         
-        return jsonify({'error': 'An error occurred processing your RSVP'}), 500
+        return jsonify({'error': f'An error occurred processing your RSVP: {e}'}), 500
 
 # Optional: Add an endpoint to get all RSVPs (password protected for admin use)
 @app.route('/api/rsvps', methods=['GET'])
