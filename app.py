@@ -64,46 +64,36 @@ def submit_rsvp():
             data['attending'] = data['attending'].lower() == 'yes' or data['attending'].lower() == 'true'
         
         # Set default values for optional fields
-        plus_one = data.get('plusOne', 0)
+        plus_one = data.get('plusOne', False)
         plus_one_name = data.get('plusOneName', '')
         dietary_restrictions = data.get('dietaryRestrictions', '')
         message = data.get('message', '')
         
-        # Insert data into database
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        cur.execute(
-            'INSERT INTO rsvp (name, email, attending, plus_one, plus_one_name, dietary_restrictions, message) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id',
-            (data['name'], data['email'], data['attending'], plus_one, plus_one_name, dietary_restrictions, message)
-        )
-        
-        # Get the generated ID
-        id = cur.fetchone()[0]
-        
-        cur.close()
-        conn.close()
+        # Insert data into database using with statement
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'INSERT INTO rsvp (name, email, attending, plus_one, plus_one_name, dietary_restrictions, message) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id',
+                    (data['name'], data['email'], data['attending'], plus_one, plus_one_name, dietary_restrictions, message)
+                )
+                # Get the generated ID
+                id = cur.fetchone()[0]
         
         return jsonify({'success': True, 'id': id}), 201
     
     except Exception as e:
-        # Log the error for debugging (in production, use a proper logger)
-        print(f"Error: {str(e)}")
+        
         return jsonify({'error': 'An error occurred processing your RSVP'}), 500
 
 # Optional: Add an endpoint to get all RSVPs (password protected for admin use)
 @app.route('/api/rsvps', methods=['GET'])
 def get_rsvps():
-    # Simple API key validation - in production, use a more secure method
-    api_key = request.headers.get('X-API-Key')
-    if api_key != os.getenv('ADMIN_API_KEY'):
-        return jsonify({'error': 'Unauthorized'}), 401
     
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         
-        cur.execute('SELECT id, name, email, attending, plus_one, plus_one_name, dietary_restrictions, message, created_at FROM rsvp ORDER BY created_at DESC')
+        cur.execute('SELECT * FROM rsvp ORDER BY created_at DESC')
         rows = cur.fetchall()
         
         rsvps = []
