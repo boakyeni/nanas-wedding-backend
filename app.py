@@ -48,7 +48,7 @@ def get_db_connection():
 # # Initialize database on startup
 # initialize_db()
 
-@app.route('/rsvp', methods=['POST'])
+@app.route('/api/rsvp', methods=['POST'])
 def submit_rsvp():
     try:
         data = request.get_json()
@@ -92,7 +92,7 @@ def submit_rsvp():
         return jsonify({'error': 'An error occurred processing your RSVP'}), 500
 
 # Optional: Add an endpoint to get all RSVPs (password protected for admin use)
-@app.route('/rsvps', methods=['GET'])
+@app.route('/api/rsvps', methods=['GET'])
 def get_rsvps():
     # Simple API key validation - in production, use a more secure method
     api_key = request.headers.get('X-API-Key')
@@ -131,7 +131,7 @@ def get_rsvps():
         return jsonify({'error': 'An error occurred retrieving RSVPs'}), 500
 
 # Health check endpoint
-@app.route('/health', methods=['GET'])
+@app.route('/api/health', methods=['GET'])
 def health_check():
     return jsonify({'status': 'healthy'}), 200
 
