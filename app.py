@@ -48,7 +48,7 @@ def initialize_db():
 # Initialize database on startup
 initialize_db()
 
-@app.route('/api/rsvp', methods=['POST'])
+@app.route('/rsvp', methods=['POST'])
 def submit_rsvp():
     try:
         data = request.get_json()
@@ -92,7 +92,7 @@ def submit_rsvp():
         return jsonify({'error': 'An error occurred processing your RSVP'}), 500
 
 # Optional: Add an endpoint to get all RSVPs (password protected for admin use)
-@app.route('/api/rsvps', methods=['GET'])
+@app.route('/rsvps', methods=['GET'])
 def get_rsvps():
     # Simple API key validation - in production, use a more secure method
     api_key = request.headers.get('X-API-Key')
