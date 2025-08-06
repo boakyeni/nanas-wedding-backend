@@ -3,6 +3,7 @@ from flask_cors import CORS
 import psycopg2
 import os
 from dotenv import load_dotenv
+import jwt
 
 # Load environment variables
 load_dotenv()
@@ -155,7 +156,7 @@ def download_rsvps():
 def health_check():
     return jsonify({'status': 'healthy'}), 200
 
-import jwt
+
 
 @app.post('/api/login')
 def login():
