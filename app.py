@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 import psycopg2
 import os
@@ -119,11 +119,74 @@ def get_rsvps():
     except Exception as e:
         print(f"Error: {str(e)}")
         return jsonify({'error': 'An error occurred retrieving RSVPs'}), 500
+    
+@app.get('/api/rsvps/download')
+def download_rsvps():
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM rsvp ORDER BY created_at DESC')
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        # Convert to CSV
+        from io import StringIO
+        import csv
+
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['id', 'name', 'email', 'attending', 'plusOne', 'plusOneName', 'dietaryRestrictions', 'message', 'createdAt'])
+        for row in rows:
+            writer.writerow(row)
+
+        output.seek(0)
+        return make_response(output.read(), 200, {
+            'Content-Disposition': 'attachment; filename=rsvps.csv',
+            'Content-Type': 'text/csv'
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 # Health check endpoint
 @app.route('/api/health', methods=['GET'])
 def health_check():
     return jsonify({'status': 'healthy'}), 200
+
+import jwt
+
+@app.post('/api/login')
+def login():
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Use `crypt($password, password)` to compare against hashed column
+                cur.execute(
+                    'SELECT id FROM users WHERE username = %s AND password = crypt(%s, password)',
+                    (username, password)
+                )
+                user = cur.fetchone()
+
+        if user:
+            token = jwt.encode({'user': username}, os.getenv('SECRET'), algorithm='HS256')
+            resp = make_response({'msg': 'ok'})
+            resp.set_cookie('access_token', token, httponly=True)
+            return resp
+        else:
+            return jsonify({'msg': 'unauthorized'}), 401
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+
+
 
 # Only for development, not production
 if __name__ == '__main__':
