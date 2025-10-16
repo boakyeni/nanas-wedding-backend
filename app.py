@@ -294,7 +294,7 @@ def create_guest():
                 INSERT INTO guests
                   (party_id, title, first_name, last_name, email, phone,
                    attending, plus_one, plus_one_name, dietary, message, source)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'admin')
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'admin')
                 RETURNING id
             """, (
                 data.get('partyId'),
@@ -492,7 +492,7 @@ def upload_csv():
                     RETURNING id
                 """, (
                     party_id,
-                    row.get('title') or '',
+                    row.get('title') or None,
                     row.get('first_name') or '',
                     row.get('last_name') or '',
                     row.get('email') or None,
