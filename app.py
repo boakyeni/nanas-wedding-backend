@@ -193,7 +193,7 @@ def get_guests():
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT
-                        g.id, g.party_id, g.first_name, g.last_name, g.display_name,
+                        g.id, g.title, g.party_id, g.first_name, g.last_name, g.display_name,
                         g.email, g.phone, g.attending, g.plus_one, g.plus_one_name,
                         g.dietary, g.message, g.created_at,
                         p.label AS party_label, p.invite_code
@@ -209,6 +209,7 @@ def get_guests():
         for r in rows:
             guests.append({
                 "id": r["id"],
+                "title": r["title"],
                 "partyId": r["party_id"],
                 "partyLabel": r["party_label"],
                 "inviteCode": r["invite_code"],
@@ -237,7 +238,7 @@ def get_parties():
                 cur.execute("""
                     SELECT
                         p.id AS party_id, p.label, p.invite_code, p.notes, p.created_at,
-                        g.id AS guest_id, g.first_name, g.last_name, g.display_name,
+                        g.id AS guest_id, g.title, g.first_name, g.last_name, g.display_name,
                         g.email, g.phone, g.attending, g.plus_one, g.plus_one_name,
                         g.dietary, g.message, g.created_at AS guest_created_at
                     FROM parties p
@@ -249,7 +250,7 @@ def get_parties():
         parties = {}
         for row in rows:
             (party_id, label, invite_code, notes, party_created_at,
-             guest_id, first_name, last_name, display_name,
+             guest_id, title, first_name, last_name, display_name,
              email, phone, attending, plus_one, plus_one_name,
              dietary, message, guest_created_at) = row
 
@@ -266,6 +267,7 @@ def get_parties():
             if guest_id is not None:
                 parties[party_id]["members"].append({
                     "id": guest_id,
+                    "title": title,
                     "firstName": first_name,
                     "lastName": last_name,
                     "displayName": display_name,
@@ -290,12 +292,13 @@ def create_guest():
         with get_db_connection() as conn, conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO guests
-                  (party_id, first_name, last_name, email, phone,
+                  (party_id, title, first_name, last_name, email, phone,
                    attending, plus_one, plus_one_name, dietary, message, source)
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'admin')
                 RETURNING id
             """, (
                 data.get('partyId'),
+                data.get('title'),
                 data['firstName'], data['lastName'],
                 data.get('email'), data.get('phone'),
                 data.get('attending'),
@@ -317,6 +320,7 @@ def update_guest(guest_id):
         data = request.get_json(force=True)
         fields = {
             "party_id": "partyId",
+            "title": "title",
             "first_name": "firstName",
             "last_name": "lastName",
             "email": "email",
@@ -482,12 +486,13 @@ def upload_csv():
 
                 cur.execute("""
                     INSERT INTO guests
-                      (party_id, first_name, last_name, email, phone,
+                      (party_id, title, first_name, last_name, email, phone,
                        attending, plus_one, plus_one_name, dietary, message, source)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'csv')
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'csv')
                     RETURNING id
                 """, (
                     party_id,
+                    row.get('title') or '',
                     row.get('first_name') or '',
                     row.get('last_name') or '',
                     row.get('email') or None,
