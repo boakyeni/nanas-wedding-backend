@@ -1,11 +1,10 @@
 from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 import psycopg2
-import os, hashlib
+import os
 from dotenv import load_dotenv
 import jwt
 from emailer import send_attendance_email
-import logging
 
 # I hate this code, it's chatgpt garbage but it works
 
@@ -14,23 +13,6 @@ load_dotenv()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 CORS(app, resources={r"/*": {"origins": ["https://nanas-wedding.vercel.app", "http://localhost:3000"]}})  # Enable CORS for all routes
-
-
-logging.basicConfig(
-    filename='app.log',  # Specifies the name of the log file
-    level=logging.INFO,  # Sets the logging level to INFO (logs INFO, WARNING, ERROR, CRITICAL)
-    format='%(asctime)s - %(levelname)s - %(message)s' # Defines the log message format
-)
-
-def log_secret(label):
-    s = os.getenv("SECRET") or ""
-    sha = hashlib.sha256(s.encode()).hexdigest()
-    msg = f"{label}: SECRET: {s}, {sha}"
-    logging.info(msg)
-    return msg
-
-log_secret()
-
 
 # Database connection function
 def get_db_connection():
@@ -185,7 +167,7 @@ def login():
         data = request.get_json()
         username = data.get('username')
         password = data.get('password')
-        log_secret()
+
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 # Use `crypt($password, password)` to compare against hashed column
