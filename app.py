@@ -178,7 +178,7 @@ def login():
                 user = cur.fetchone()
 
         if user:
-            token = jwt.encode({'user': username}, os.getenv('SECRET'))
+            token = jwt.encode({'user': username}, os.getenv('SECRET'), algorithm='HS256')
             resp = make_response({'msg': 'ok'})
             resp.set_cookie('access_token', token, httponly=True)
             return resp
