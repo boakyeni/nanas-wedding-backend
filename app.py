@@ -4,13 +4,14 @@ import psycopg2
 import os
 from dotenv import load_dotenv
 import jwt
+from emailer import send_attendance_email
 
 # I hate this code, it's chatgpt garbage but it works
 
 # Load environment variables
 load_dotenv()
-
-app = Flask(__name__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 CORS(app, resources={r"/*": {"origins": ["https://nanas-wedding.vercel.app", "http://localhost:3000"]}})  # Enable CORS for all routes
 
 # Database connection function
@@ -177,7 +178,7 @@ def login():
                 user = cur.fetchone()
 
         if user:
-            token = jwt.encode({'user': username}, os.getenv('SECRET'), algorithm='HS256')
+            token = jwt.encode({'user': username}, os.getenv('SECRET'))
             resp = make_response({'msg': 'ok'})
             resp.set_cookie('access_token', token, httponly=True)
             return resp
@@ -518,6 +519,36 @@ def upload_csv():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+@app.post("/api/send-confirmation")
+def send_confirmation():
+    data = request.get_json(force=True, silent=True) or {}
+
+    required = [
+        "to", "guestName", "seats", "venueName",
+        "venueAddress", "mapsUrl", "websiteUrl", "guideUrl"
+    ]
+    missing = [k for k in required if not data.get(k)]
+    if missing:
+        return jsonify({"ok": False, "error": f"Missing fields: {', '.join(missing)}"}), 400
+
+    try:
+        send_attendance_email(
+            to_email=data["to"],
+            guest_name=data["guestName"],
+            seats=int(data["seats"]),
+            venue_name=data["venueName"],
+            venue_address=data["venueAddress"],
+            maps_url=data["mapsUrl"],
+            website_url=data["websiteUrl"],
+            guide_url=data["guideUrl"],
+            reply_to=data.get("replyTo"),
+        )
+        return jsonify({"ok": True}), 200
+
+    except Exception as e:
+        print("Email Error:", str(e))
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 
