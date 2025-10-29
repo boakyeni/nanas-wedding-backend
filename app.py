@@ -543,6 +543,7 @@ def send_confirmation():
             website_url=data["websiteUrl"],
             guide_url=data["guideUrl"],
             reply_to=data.get("replyTo"),
+            subject=data.get("subject")
         )
         return jsonify({"ok": True}), 200
 

@@ -4,11 +4,15 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="x-apple-disable-message-reformatting" />
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
   <title>We’re excited to celebrate with you ✨</title>
+
   <style>
     @media (max-width: 600px) {
       .container { width: 100% !important; }
       .px { padding-left: 16px !important; padding-right: 16px !important; }
+      a.button { display:inline-block !important; max-width:100% !important; box-sizing:border-box !important; text-align:center !important; }
     }
     a.button {
       text-decoration:none;
@@ -18,26 +22,63 @@
       font-weight:600;
     }
   </style>
+
+  <!-- Reassert colors for clients that honor dark-mode media -->
+  <style>
+    @media (prefers-color-scheme: dark) {
+      body      { background:#ffffff !important; color:#f7f3ff !important; }
+      table     { background:transparent !important; }
+      td        { color:#f7f3ff !important; }
+      .container{ background:#1a001f !important; }
+      .px       { color:#f7f3ff !important; }
+
+      .hdr { background:linear-gradient(to bottom right,#2e003e,#4b0c5d,#1a001f) !important; }
+      h1   { color:#f1c27d !important; }
+
+      .venue { background:linear-gradient(to bottom right,#001f4d,#2c3e91,#000e2e) !important; color:#e0e6ff !important; }
+      a.button { background:linear-gradient(to bottom,#b29043,#f1c27d,#b29043) !important; color:#1a001f !important; }
+      a { color:#f1c27d !important; }
+    }
+  </style>
+
+  <!-- Outlook.com / O365 Web dark-mode hooks -->
+  <style>
+    [data-ogsc] .container, [data-ogsb] .container { background:#1a001f !important; }
+    [data-ogsc] .hdr,       [data-ogsb] .hdr       { background:linear-gradient(to bottom right,#2e003e,#4b0c5d,#1a001f) !important; }
+    [data-ogsc] .venue,     [data-ogsb] .venue     { background:linear-gradient(to bottom right,#001f4d,#2c3e91,#000e2e) !important; color:#e0e6ff !important; }
+    [data-ogsc] a.button,   [data-ogsb] a.button   { background:linear-gradient(to bottom,#b29043,#f1c27d,#b29043) !important; color:#1a001f !important; }
+    [data-ogsc] h1,         [data-ogsb] h1         { color:#f1c27d !important; }
+  </style>
+
+  <style>
+    @media (prefers-color-scheme: dark) {
+      h1 { color:#f1c27d !important; }
+    }
+  </style>
 </head>
-<body style="margin:0; padding:0; color:#f7f3ff; font-family:ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+
+<body bgcolor="#ffffff" style="margin:0; padding:0; color:#f7f3ff; background:#ffffff; font-family:ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
 
   <!-- invisible preview text -->
   <div style="display:none; visibility:hidden; opacity:0; height:0; width:0; overflow:hidden; mso-hide:all;">
     Attendance confirmed — {{ seats }} seat{% if seats != 1 %}s{% endif %} reserved.
   </div>
 
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" align="center">
+  <!-- ✅ OUTER BACKGROUND IS NOW OFF-WHITE -->
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" align="center"
+         bgcolor="#ffffff" style="background:#ffffff;">
     <tr>
       <td align="center" style="padding:24px 12px;">
 
-        <!-- card -->
+        <!-- ✅ CARD REMAINS DARK PURPLE -->
         <table role="presentation" width="600" class="container" cellpadding="0" cellspacing="0" border="0"
+               bgcolor="#1a001f"
                style="width:600px; max-width:100%; background:#1a001f; border-radius:18px; overflow:hidden; box-shadow:0 4px 18px rgba(0,0,0,0.35);">
 
           <!-- header -->
           <tr>
-            <td style="padding:24px 28px; background:linear-gradient(to bottom right, #2e003e, #4b0c5d, #1a001f);">
-              <h1 style="margin:0; font-size:22px; line-height:1.3; background:linear-gradient(to bottom,#b29043,#f1c27d,#b29043); -webkit-background-clip:text; -webkit-text-fill-color:transparent;">
+            <td class="hdr" bgcolor="#2e003e" style="padding:24px 28px; background:linear-gradient(to bottom right, #2e003e, #4b0c5d, #1a001f);">
+              <h1 style="margin:0 0 20px 0; font-size:22px; line-height:1.3; color:#f1c27d !important; font-weight:700; text-align:center;">
                 We’re excited to celebrate with you ✨
               </h1>
             </td>
@@ -45,26 +86,40 @@
 
           <!-- greeting -->
           <tr>
-            <td class="px" style="padding:20px 28px; font-size:16px; line-height:1.6; color:#f7f3ff;">
+            <td class="px" bgcolor="#1a001f" style="padding:20px 28px; font-size:16px; line-height:1.6; color:#f7f3ff;">
               <p style="margin-top:0;">Hi <strong style="color:#f1c27d;">{{ guest_name }}</strong>,</p>
               <p>Thank you for confirming your attendance! We’re so happy you’ll be joining us.</p>
-              <p>We’ve reserved <strong style="color:#f1c27d;">{{ seats }} seat{% if seats != 1 %}s{% endif %}</strong> for you.</p>
+              <p>
+                We’ve reserved
+                {% if seats == 1 %}
+                    <strong style="color:#f1c27d;">your seat</strong>
+                {% else %}
+                    <strong style="color:#f1c27d;">{{ seats }} seats</strong> for you and your party.
+                {% endif %}
+              </p>
+              <strong style="color:#f1c27d;">Plans change — no stress.</strong>
+              If anything shifts between now and the wedding, please take a moment to update your RSVP so we can adjust seating and meals.
+              <a href="https://nanas-wedding.vercel.app/checkin"
+                 target="_blank" rel="noopener noreferrer"
+                 style="color:#f1c27d; font-weight:600; text-decoration:underline;">
+                Update your RSVP →
+              </a>
             </td>
           </tr>
 
           <!-- venue -->
           <tr>
-            <td style="padding:0 28px;">
-              <table role="presentation" width="100%" style="background:linear-gradient(to bottom right, #001f4d, #2c3e91, #000e2e); border-radius:14px;">
+            <td bgcolor="#1a001f" style="padding:0 28px;">
+              <table role="presentation" width="100%" class="venue" bgcolor="#001f4d"
+                     style="background:linear-gradient(to bottom right, #001f4d, #2c3e91, #000e2e); border-radius:14px;">
                 <tr>
                   <td style="padding:18px 20px; font-size:15px; line-height:1.6; color:#e0e6ff;">
-                    <div style="font-weight:600; color:#f1c27d; margin-bottom:4px;">Ceremony & Reception</div>
+                    <div style="font-weight:600; color:#f1c27d; margin-bottom:4px;">Ceremony &amp; Reception</div>
                     <div>{{ venue_name }}</div>
                     <div>{{ venue_address }}</div>
                     <div style="margin-top:12px;">
                       <a href="{{ maps_url }}" class="button"
-                        style="background:linear-gradient(to bottom,#b29043,#f1c27d,#b29043); color:#1a001f; text-align:center;"
-                        target="_blank" rel="noopener noreferrer">
+                         style="background:linear-gradient(to bottom,#b29043,#f1c27d,#b29043); color:#1a001f; text-align:center;">
                         Open in Google Maps
                       </a>
                     </div>
@@ -76,67 +131,55 @@
 
           <!-- wedding guide -->
           <tr>
-            <td style="padding:24px 28px 0 28px; font-size:16px; line-height:1.6; color:#f7f3ff;">
-              <p><strong style="color:#f1c27d;">Before you pack...</strong>  
+            <td bgcolor="#1a001f" style="padding:24px 28px 0 28px; font-size:16px; line-height:1.6; color:#f7f3ff;">
+              <p><strong style="color:#f1c27d;">Before you pack...</strong>
               Be sure to check out our Wedding Guide with what to wear, packing essentials, and special moments to plan for!</p>
               <a href="{{ guide_url }}" class="button"
-                 style="margin-top:8px; background:linear-gradient(to bottom,#b29043,#f1c27d,#b29043); color:#1a001f;"
-                 target="_blank" rel="noopener noreferrer">
+                 style="margin-top:8px; background:linear-gradient(to bottom,#b29043,#f1c27d,#b29043); color:#1a001f;">
                 View Wedding Guide 🧳
               </a>
             </td>
           </tr>
 
-<!-- closing + right corner logo -->
-<tr>
-  <td class="" style="padding: 14px;">
+          <!-- closing + right corner logo -->
+          <tr>
+            <td bgcolor="#1a001f" style="padding: 14px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td valign="middle" style="color:#e0d4f7; font-size:15px; line-height:1.6;">
+                    We can’t wait to celebrate with you!<br/>
+                    <span style="font-style: italic;">— The Nimako &amp; Bandau Families</span>
+                  </td>
 
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-      <tr>
+                  <td valign="bottom" align="right" style="padding-left:12px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate; border-spacing:0; margin-left:auto; margin-top:-40px;">
+                      <tr>
+                        <td align="center" valign="middle" width="100" height="100"
+                            style="width:100px; height:100px; border-radius:50%;
+                                   background:rgba(255,255,255,0.72);
+                                   border:1px solid rgba(255,255,255,0.35);
+                                   line-height:0; text-align:center;">
+                          <img
+                            src="https://nanas-wedding.vercel.app/n_w.png"
+                            alt="Nana &amp; Bandau Wedding Logo"
+                            width="100"
+                            style="display:block; border:0; max-width:100px; height:auto; margin:0 auto;"
+                          />
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
 
-        <!-- LEFT SIDE: closing text stays exactly the same -->
-        <td valign="middle" style="color:#e0d4f7; font-size:15px; line-height:1.6;">
-          We can’t wait to celebrate with you!<br/>
-          <span style="font-style: italic;">— The Nimako &amp; Bandau Families</span>
-        </td>
-
-        <!-- RIGHT SIDE: frosted circular logo -->
-        <td valign="bottom" align="right" style="padding-left:12px;">
-          <div style="
-            width:100px;
-            height:100px;
-            border-radius:50%;
-            background:rgba(255,255,255,0.72);
-            backdrop-filter:blur(10px);
-            -webkit-backdrop-filter:blur(10px);
-            border:1px solid rgba(255,255,255,0.35);
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            margin-left:auto;
-            margin-top:-40px;
-          ">
-            <img
-              src="https://nanas-wedding.vercel.app/n_w.png"
-              alt="Nana &amp; Bandau Wedding Logo"
-              width="120"
-              style="display:block;"
-            />
-          </div>
-        </td>
-
-      </tr>
-    </table>
-
-  </td>
-</tr>
-          
+                </tr>
+              </table>
+            </td>
+          </tr>
 
           <!-- footer -->
           <tr>
-            <td style="padding:16px 28px 28px 28px; font-size:12px; color:#a795ba; border-top:1px solid #4b0c5d;">
+            <td bgcolor="#1a001f" style="padding:16px 28px 28px 28px; font-size:12px; color:#a795ba; border-top:1px solid #4b0c5d;">
               This email was sent from our wedding website •
-              <a href="{{ website_url }}" style="color:#e0d4f7;" target="_blank">
+              <a href="{{ website_url }}" style="color:#e0d4f7;" target="_blank" rel="noopener noreferrer">
                 {{ website_url | replace('https://','') | replace('http://','') }}
               </a>
             </td>
