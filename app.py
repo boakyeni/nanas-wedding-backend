@@ -12,7 +12,7 @@ from emailer import send_attendance_email
 load_dotenv()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
-CORS(app, resources={r"/*": {"origins": ["https://nanas-wedding.vercel.app", "http://localhost:3000"]}})  # Enable CORS for all routes
+CORS(app, resources={r"/*": {"origins": ["https://nanaandwahabwedding.com", "https://nanas-wedding.vercel.app", "http://localhost:3000"]}})  # Enable CORS for all routes
 
 # Database connection function
 def get_db_connection():

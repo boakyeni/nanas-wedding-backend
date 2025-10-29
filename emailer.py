@@ -1,4 +1,5 @@
-import os, ssl, smtplib
+import os
+import boto3
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr, formatdate, make_msgid
@@ -7,8 +8,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS")
-GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
+SES_FROM_ADDRESS = os.getenv("SES_FROM_ADDRESS")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+
+# create reusable SES client
+ses = boto3.client("ses", region_name=AWS_REGION)
 
 def build_html(guest_name, seats, venue_name, venue_address, maps_url, website_url, guide_url):
     return render_template(
@@ -44,36 +48,36 @@ def send_attendance_email(
     subject: str | None = None,
 ):
     if not subject:
-        subject = "Nana-Serwaa and Abdul Wahab's Wedding ✨"
+        subject = "Nana-Serwaa and Abdul Wahab’s Wedding ✨"
 
     html = build_html(guest_name, seats, venue_name, venue_address, maps_url, website_url, guide_url)
     text = build_text(guest_name, seats, website_url)
 
-    # multipart/alternative: text then html
+    # Assemble MIME (for clarity; SES will parse both)
     msg = MIMEMultipart("alternative")
-    msg["From"] = formataddr(("Nana-Serwaa & Abdul Wahab", GMAIL_ADDRESS))
-    msg["To"] = to_email
     msg["Subject"] = subject
+    msg["From"] = formataddr(("Nana-Serwaa & Abdul Wahab", SES_FROM_ADDRESS))
+    msg["To"] = to_email
     msg["Date"] = formatdate(localtime=True)
-    msg["Message-ID"] = make_msgid(domain="gmail.com")  # fine for Gmail SMTP
+    msg["Message-ID"] = make_msgid(domain="nanaandwahabwedding.com")
     if reply_to:
         msg["Reply-To"] = reply_to
 
-    # Good for deliverability
-    msg["List-Unsubscribe"] = f"<mailto:{GMAIL_ADDRESS}?subject=unsubscribe>, <{website_url.rstrip('/')}/unsubscribe?email={to_email}>"
+    msg["List-Unsubscribe"] = (
+        f"<mailto:{SES_FROM_ADDRESS}?subject=unsubscribe>, "
+        f"<{website_url.rstrip('/')}/unsubscribe?email={to_email}>"
+    )
     msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
 
-    # Attach text then html
     msg.attach(MIMEText(text, "plain", "utf-8"))
     msg.attach(MIMEText(html, "html", "utf-8"))
 
-    context = ssl.create_default_context()
+    # Send through SES
+    response = ses.send_raw_email(
+        Source=SES_FROM_ADDRESS,
+        Destinations=[to_email],
+        RawMessage={"Data": msg.as_string()},
+    )
 
-    # Either SSL 465 (as you had) OR STARTTLS 587. Both are fine with Gmail.
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as smtp:
-        smtp.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
-        # Envelope MAIL FROM must be your Gmail to avoid DMARC/“via gmail.com” weirdness.
-        smtp.sendmail(GMAIL_ADDRESS, [to_email], msg.as_string())
-
-    # with smtplib.SMTP("127.0.0.1", 1025) as smtp:
-    #     smtp.sendmail("test@example.com", [to_email], msg.as_string())
+    print("Email sent via SES:", response["MessageId"])
+    return response
