@@ -5,6 +5,7 @@ import os
 from dotenv import load_dotenv
 import jwt
 from emailer import send_attendance_email
+from twilioer import send_whatsapp
 
 # I hate this code, it's chatgpt garbage but it works
 
@@ -550,6 +551,24 @@ def send_confirmation():
     except Exception as e:
         print("Email Error:", str(e))
         return jsonify({"ok": False, "error": str(e)}), 500
+    
+@app.post("/send_whatsapp_message")
+def send_whatsapp_message():
+    data = request.get_json() or {}
+
+    try:
+        sid = send_whatsapp(
+            guest_name=data.get("guest_name"),
+            phone_number=data.get("phone_number"),
+            attending=bool(data.get("attending")),
+            seats=data.get("seats"),
+            rsvp_link=data.get("rsvp_link"),
+        )
+        return jsonify({"status": "sent", "sid": sid}), 200
+
+    except Exception as e:
+        print("WhatsApp error:", e)
+        return jsonify({"error": str(e)}), 500
 
 
 

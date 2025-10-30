@@ -1,18 +1,15 @@
-import os
-import boto3
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+import os, requests
 from email.utils import formataddr, formatdate, make_msgid
 from flask import render_template
 from dotenv import load_dotenv
 
 load_dotenv()
 
-SES_FROM_ADDRESS = os.getenv("SES_FROM_ADDRESS")
-AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
-
-# create reusable SES client
-ses = boto3.client("ses", region_name=AWS_REGION)
+# Zepto env
+ZEPTO_TOKEN   = os.getenv("ZEPTO_TOKEN")  # Zepto "Send Mail Token"
+FROM_ADDRESS  = os.getenv("FROM_ADDRESS", "rsvp@nanaandwahabwedding.com")
+FROM_NAME     = os.getenv("FROM_NAME", "Nana-Serwaa & Abdul Wahab")
+ZEPTO_API     = "https://api.zeptomail.com/v1.1/email"
 
 def build_html(guest_name, seats, venue_name, venue_address, maps_url, website_url, guide_url):
     return render_template(
@@ -48,36 +45,37 @@ def send_attendance_email(
     subject: str | None = None,
 ):
     if not subject:
-        subject = "Nana-Serwaa and Abdul Wahab’s Wedding ✨"
+        subject = "Nana-Serwaa and Abdul Wahab's Wedding ✨"
 
     html = build_html(guest_name, seats, venue_name, venue_address, maps_url, website_url, guide_url)
     text = build_text(guest_name, seats, website_url)
 
-    # Assemble MIME (for clarity; SES will parse both)
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = formataddr(("Nana-Serwaa & Abdul Wahab", SES_FROM_ADDRESS))
-    msg["To"] = to_email
-    msg["Date"] = formatdate(localtime=True)
-    msg["Message-ID"] = make_msgid(domain="nanaandwahabwedding.com")
-    if reply_to:
-        msg["Reply-To"] = reply_to
+    headers = [
+        {"name": "Date", "value": formatdate(localtime=True)},
+        {"name": "Message-ID", "value": make_msgid(domain="nanaandwahabwedding.com")},
+        {"name": "List-Unsubscribe", "value": f"<mailto:{FROM_ADDRESS}?subject=unsubscribe>, <{website_url.rstrip('/')}/unsubscribe?email={to_email}>"},
+        {"name": "List-Unsubscribe-Post", "value": "List-Unsubscribe=One-Click"},
+    ]
 
-    msg["List-Unsubscribe"] = (
-        f"<mailto:{SES_FROM_ADDRESS}?subject=unsubscribe>, "
-        f"<{website_url.rstrip('/')}/unsubscribe?email={to_email}>"
+    payload = {
+        "from": {"address": FROM_ADDRESS, "name": FROM_NAME},
+        "to": [{"email_address": {"address": to_email, "name": guest_name}}],
+        **({"reply_to": [{"address": reply_to}]} if reply_to else {}),
+        "subject": subject,
+        "htmlbody": html,
+        "textbody": text,
+        "headers": headers,
+    }
+
+    r = requests.post(
+        ZEPTO_API,
+        json=payload,
+        headers={
+            "Authorization": f"Zoho-enczapikey {ZEPTO_TOKEN}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+        timeout=20,
     )
-    msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
-
-    msg.attach(MIMEText(text, "plain", "utf-8"))
-    msg.attach(MIMEText(html, "html", "utf-8"))
-
-    # Send through SES
-    response = ses.send_raw_email(
-        Source=SES_FROM_ADDRESS,
-        Destinations=[to_email],
-        RawMessage={"Data": msg.as_string()},
-    )
-
-    print("Email sent via SES:", response["MessageId"])
-    return response
+    r.raise_for_status()
+    return r.json()
