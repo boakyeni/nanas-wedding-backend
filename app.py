@@ -552,7 +552,7 @@ def send_confirmation():
         print("Email Error:", str(e))
         return jsonify({"ok": False, "error": str(e)}), 500
     
-@app.post("/send_whatsapp_message")
+@app.post("/api/send_whatsapp_message")
 def send_whatsapp_message():
     data = request.get_json() or {}
 
