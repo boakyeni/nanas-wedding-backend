@@ -7,7 +7,7 @@ load_dotenv()
 
 # Zepto env
 ZEPTO_TOKEN = os.getenv("ZEPTO_TOKEN")  # Zepto "Send Mail Token"
-FROM_ADDRESS = os.getenv("FROM_ADDRESS", "rsvp@nanaandwahabwedding.com")
+FROM_ADDRESS = os.getenv("FROM_ADDRESS", "info@nanaandwahabwedding.com")
 FROM_NAME = os.getenv("FROM_NAME", "Nana-Serwaa & Abdul Wahab")
 ZEPTO_API = "https://api.zeptomail.com/v1.1/email"
 
