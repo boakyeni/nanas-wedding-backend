@@ -29,7 +29,7 @@ def build_html(
 
 def build_text(guest_name, seats, website_url):
     seats_line = (
-        "a seat in your honor" if int(seats) == 1 else f"{seats} seats for you and your party"
+        "1 seat in your honor" if int(seats) == 1 else f"{seats} seats for you and your party"
     )
     return (
         f"Hi {guest_name},\n\n"
