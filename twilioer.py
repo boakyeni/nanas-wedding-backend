@@ -24,7 +24,7 @@ def send_whatsapp(guest_name: str, phone_number: str, attending: bool,
 
     # Normalize phone number
     formatted_number = clean_phone_number(phone_number)
-    seat_text = "your seat" if str(seats) == "1" else f"{seats} seats for you and your party"
+    seat_text = "1 seat" if str(seats) == "1" else f"{seats} seats for you and your party"
 
     if attending:
         if not seats or not rsvp_link:
