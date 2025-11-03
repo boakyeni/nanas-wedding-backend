@@ -199,7 +199,7 @@ def get_guests():
                     SELECT
                         g.id, g.title, g.party_id, g.first_name, g.last_name, g.display_name,
                         g.email, g.phone, g.attending, g.plus_one, g.plus_one_name,
-                        g.dietary, g.message, g.attending_confirmation_sent, g.created_at,
+                        g.dietary, g.message, g.attending_confirmation_sent, g.whatsapp_confirmation_sent, g.created_at,
                         p.label AS party_label, p.invite_code
                     FROM guests g
                     LEFT JOIN parties p ON p.id = g.party_id
@@ -228,6 +228,7 @@ def get_guests():
                 "dietary": r["dietary"],
                 "message": r["message"],
                 "attending_confirmation_sent": r["attending_confirmation_sent"],
+                "whatsapp_confirmation_sent": r["whatsapp_confirmation_sent"],
                 "createdAt": r["created_at"].isoformat() if r["created_at"] else None
             })
 
@@ -245,7 +246,7 @@ def get_parties():
                         p.id AS party_id, p.label, p.invite_code, p.notes, p.created_at,
                         g.id AS guest_id, g.title, g.first_name, g.last_name, g.display_name,
                         g.email, g.phone, g.attending, g.plus_one, g.plus_one_name,
-                        g.dietary, g.message, g.attending_confirmation_sent, g.created_at AS guest_created_at
+                        g.dietary, g.message, g.attending_confirmation_sent, g.whatsapp_confirmation_sent, g.created_at AS guest_created_at
                     FROM parties p
                     LEFT JOIN guests g ON g.party_id = p.id
                     ORDER BY p.created_at DESC, g.last_name, g.first_name;
@@ -257,7 +258,7 @@ def get_parties():
             (party_id, label, invite_code, notes, party_created_at,
              guest_id, title, first_name, last_name, display_name,
              email, phone, attending, plus_one, plus_one_name,
-             dietary, message, attending_confirmation_sent, guest_created_at) = row
+             dietary, message, attending_confirmation_sent, whatsapp_confirmation_sent, guest_created_at) = row
 
             if party_id not in parties:
                 parties[party_id] = {
@@ -284,6 +285,7 @@ def get_parties():
                     "dietary": dietary,
                     "message": message,
                     "attending_confirmation_sent": attending_confirmation_sent,
+                    "whatsapp_confirmation_sent": whatsapp_confirmation_sent,
                     "createdAt": guest_created_at.isoformat() if guest_created_at else None
                 })
 
@@ -336,7 +338,8 @@ def update_guest(guest_id):
             "plus_one_name": "plusOneName",
             "dietary": "dietary",
             "attending_confirmation_sent": "attending_confirmation_sent",
-            "message": "message"
+            "message": "message",
+            "whatsapp_confirmation_sent": "whatsapp_confirmation_sent"
         }
         sets, params = [], []
         for col, key in fields.items():
