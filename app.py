@@ -572,6 +572,162 @@ def send_whatsapp_message():
     except Exception as e:
         print("WhatsApp error:", e)
         return jsonify({"error": str(e)}), 500
+    
+@app.post("/api/guests/<int:guest_id>/send_confirmations")
+def send_confirmations(guest_id: int):
+    """
+    Uses current DB state.
+    Body (all optional):
+    {
+      "email": "optional new email",    # optional contact update
+      "phone": "+15551234567",          # optional contact update
+      "send_email_if_needed": true,
+      "send_whatsapp_if_needed": true,
+
+      "email_payload": {                # required fields for your email sender
+        "guest_name": "...",
+        "venue_name": "...",
+        "venue_address": "...",
+        "maps_url": "...",
+        "website_url": "...",
+        "guide_url": "...",
+        "reply_to": "optional",
+        "subject": "optional"
+      },
+      "whatsapp_payload": {
+        "guest_name": "...",
+        "attending": true,              # defaults to DB value if omitted
+        "rsvp_link": "..."
+      }
+    }
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    try:
+        conn = get_db_connection()
+        conn.autocommit = False
+        try:
+            with conn.cursor() as cur:
+                # 1) Lock the guest row (we need party_id, contact, flags, plus_one, attending, name)
+                cur.execute("""
+                    SELECT party_id, email, phone, plus_one,
+                           attending, attending_confirmation_sent, whatsapp_confirmation_sent, display_name
+                    FROM guests
+                    WHERE id = %s
+                    FOR UPDATE
+                """, (guest_id,))
+                row = cur.fetchone()
+                if not row:
+                    conn.rollback()
+                    return jsonify({"error": "guest_not_found"}), 404
+
+                (party_id, db_email, db_phone, plus_one,
+                 db_attending, email_sent, wa_sent,
+                 display_name) = row
+
+                # 2) Optional contact update (still under lock)
+                new_email = data.get("email") or db_email
+                new_phone = data.get("phone") or db_phone
+                if (new_email != db_email) or (new_phone != db_phone):
+                    cur.execute("""
+                        UPDATE guests
+                        SET email = %s, phone = %s
+                        WHERE id = %s
+                    """, (new_email, new_phone, guest_id))
+                    db_email, db_phone = new_email, new_phone
+
+                # 3) Compute seats from current DB state
+                #    Party seats: SUM over attending members of (1 + (plus_one?1:0))
+                if party_id is not None:
+                    cur.execute("""
+                    SELECT id, attending, plus_one
+                    FROM guests
+                    WHERE party_id = %s
+                    FOR UPDATE
+                    """, (party_id,))
+                    members = cur.fetchall()
+                    # members: [(id, attending, plus_one), ...]
+                    seats = 0
+                    for _, attending, plus_one_m in members:
+                        if attending:
+                            seats += 1 + (1 if plus_one_m else 0)
+                else:
+                    seats = (1 + (1 if plus_one else 0)) if db_attending else 0
+
+                # 4) Decide what to send based on flags + contact
+                want_email = bool(data.get("send_email_if_needed", True))
+                want_wa = bool(data.get("send_whatsapp_if_needed", True))
+
+                is_attending = bool(db_attending)
+
+                will_send_email = bool(want_email and is_attending and db_email and not email_sent)
+                will_send_wa = bool(want_wa and is_attending and db_phone and not wa_sent)
+
+                # 5) Perform sends (raise on failure to abort & keep flags unchanged)
+                if will_send_email:
+                    ep = data.get("email_payload") or {}
+                    # validate required keys for your email helper
+                    required_email_keys = ["guest_name", "venue_name", "venue_address",
+                                           "maps_url", "website_url", "guide_url"]
+                    missing = [k for k in required_email_keys if not ep.get(k)]
+                    if missing:
+                        conn.rollback()
+                        return jsonify({"error": f"missing_email_payload: {', '.join(missing)}"}), 400
+
+                    send_attendance_email(
+                        to_email=db_email,
+                        guest_name=display_name,
+                        seats=int(seats),
+                        venue_name=ep["venue_name"],
+                        venue_address=ep["venue_address"],
+                        maps_url=ep["maps_url"],
+                        website_url=ep["website_url"],
+                        guide_url=ep["guide_url"],
+                        reply_to=ep.get("reply_to"),
+                        subject=ep.get("subject"),
+                    )
+
+                if will_send_wa:
+                    wp = data.get("whatsapp_payload") or {}
+                    send_whatsapp(
+                        guest_name=display_name,
+                        phone_number=db_phone,
+                        attending=bool(wp.get("attending", db_attending)),
+                        seats=int(seats),
+                        rsvp_link=wp.get("rsvp_link"),
+                    )
+
+                # 6) Flip flags only for channels we actually sent
+                if will_send_email or will_send_wa:
+                    cur.execute("""
+                        UPDATE guests
+                        SET attending_confirmation_sent = attending_confirmation_sent OR %s,
+                            whatsapp_confirmation_sent   = whatsapp_confirmation_sent   OR %s
+                        WHERE id = %s
+                        RETURNING attending_confirmation_sent, whatsapp_confirmation_sent
+                    """, (will_send_email, will_send_wa, guest_id))
+                    email_sent, wa_sent = cur.fetchone()
+
+            conn.commit()
+            return jsonify({
+                "id": guest_id,
+                "party_id": party_id,
+                "seats": int(seats),
+                "attending": bool(db_attending),
+                "attending_confirmation_sent": bool(email_sent),
+                "whatsapp_confirmation_sent": bool(wa_sent),
+                "sent": {"email": bool(will_send_email), "whatsapp": bool(will_send_wa)}
+            }), 200
+
+        except Exception as e:
+            conn.rollback()
+            return jsonify({"error": str(e)}), 500
+        finally:
+            conn.autocommit = True
+            conn.close()
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 
 
