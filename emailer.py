@@ -2,9 +2,11 @@ import os, requests
 from email.utils import formataddr, formatdate, make_msgid
 from flask import render_template
 from dotenv import load_dotenv
+from logging_setup import setup_logger
 
 load_dotenv()
 
+log = setup_logger()
 # Zepto env
 ZEPTO_TOKEN = os.getenv("ZEPTO_TOKEN")  # Zepto "Send Mail Token"
 FROM_ADDRESS = os.getenv("FROM_ADDRESS", "info@nanaandwahabwedding.com")
@@ -73,16 +75,29 @@ def send_attendance_email(
         },
     }
 
-    r = requests.post(
-        ZEPTO_API,
-        json=payload,
-        headers={
-            "Authorization": f"Zoho-enczapikey {ZEPTO_TOKEN}",
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        },
-        timeout=20,
-    )
+    try:
+        r = requests.post(
+            ZEPTO_API,
+            json=payload,
+            headers={
+                "Authorization": f"Zoho-enczapikey {ZEPTO_TOKEN}",
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+            timeout=60,
+        )
+
+        # try to parse JSON safely
+        try:
+            resp_json = r.json()
+        except Exception as e:
+            resp_json = {"non_json_response": r.text[:500]}  # truncate to be safe
+
+        log.debug("Zepto response: %s %s", r.status_code, resp_json)
+
+    except requests.RequestException as e:
+        log.error("Zepto request failed: %s", e, exc_info=True)
+
     # print Zepto error body if it fails, so you see the reason
     try:
         r.raise_for_status()

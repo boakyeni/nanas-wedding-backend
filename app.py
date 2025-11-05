@@ -6,6 +6,9 @@ from dotenv import load_dotenv
 import jwt
 from emailer import send_attendance_email
 from twilioer import send_whatsapp
+from logging_setup import setup_logger
+
+log = setup_logger()
 
 # I hate this code, it's chatgpt garbage but it works
 
@@ -552,7 +555,7 @@ def send_confirmation():
         return jsonify({"ok": True}), 200
 
     except Exception as e:
-        print("Email Error:", str(e))
+        log.error("Email Error:", str(e))
         return jsonify({"ok": False, "error": str(e)}), 500
     
 @app.post("/api/send_whatsapp_message")
@@ -601,6 +604,7 @@ def send_confirmations(guest_id: int):
       }
     }
     """
+    log.info("Call made to send confirmations")
     data = request.get_json(force=True, silent=True) or {}
     try:
         conn = get_db_connection()
