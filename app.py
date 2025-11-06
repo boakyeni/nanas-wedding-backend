@@ -629,20 +629,27 @@ def send_confirmations(guest_id: int):
                  display_name) = row
 
                 # 2) Optional contact update (still under lock)
-                new_email = data.get("email") or db_email
-                new_phone = data.get("phone") or db_phone
+                new_email = data.get("email", "") or db_email
+                new_phone = data.get("phone", "") or db_phone
                 if (new_email != db_email) or (new_phone != db_phone):
                     cur.execute("""
                         UPDATE guests
                         SET email = %s, phone = %s
                         WHERE id = %s
+                        RETURNING email, phone
                     """, (new_email, new_phone, guest_id))
-                    if cur.rowcount == 0:
+                    row = cur.fetchone()
+                    if not row:
+                        # id didn’t match (shouldn’t happen since you SELECTed earlier)
                         conn.rollback()
-                        log.warning(f"No guest updated for id={guest_id} (email={new_email}, phone={new_phone})")
-                        return jsonify({"error": "contact_update_failed"}), 500
-                    db_email, db_phone = new_email, new_phone
+                        return jsonify({"error": "guest_not_found"}), 404
+
+                    db_email, db_phone = row
                     
+                    if (db_email or "").strip().lower() != (new_email or "").strip().lower() or (db_phone or "").strip() != (new_phone or "").strip():
+                        log.warning("DB data mismatch: new=%r stored=%r", new_email, db_email)
+                        conn.rollback()
+                        return jsonify({"error": "email_not_saved_correctly"}), 409
 
                 # 3) Compute seats from current DB state
                 #    Party seats: SUM over attending members of (1 + (plus_one?1:0))
