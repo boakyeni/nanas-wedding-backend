@@ -34,12 +34,14 @@ def send_whatsapp(guest_name: str, phone_number: str, attending: bool,
     else:
         content_sid = HX_DECLINE
         content_vars = {"1": guest_name}
-
-    message = twilio_client.messages.create(
-        from_=TWILIO_WHATSAPP_FROM,
-        to=f"whatsapp:{formatted_number}",
-        content_sid=content_sid,
-        content_variables=json.dumps(content_vars),
-    )
-
-    return message.sid
+    try:
+        message = twilio_client.messages.create(
+            from_=TWILIO_WHATSAPP_FROM,
+            to=f"whatsapp:{formatted_number}",
+            content_sid=content_sid,
+            content_variables=json.dumps(content_vars),
+        )
+        return message.sid
+    except Exception as e:
+        # If it’s a TwilioRestException (or specialized exception) you might do:
+        raise  # or wrap into your own exception with the code

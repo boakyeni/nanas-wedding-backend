@@ -637,7 +637,12 @@ def send_confirmations(guest_id: int):
                         SET email = %s, phone = %s
                         WHERE id = %s
                     """, (new_email, new_phone, guest_id))
+                    if cur.rowcount == 0:
+                        conn.rollback()
+                        log.warning(f"No guest updated for id={guest_id} (email={new_email}, phone={new_phone})")
+                        return jsonify({"error": "contact_update_failed"}), 500
                     db_email, db_phone = new_email, new_phone
+                    
 
                 # 3) Compute seats from current DB state
                 #    Party seats: SUM over attending members of (1 + (plus_one?1:0))
@@ -665,61 +670,81 @@ def send_confirmations(guest_id: int):
 
                 will_send_email = bool(want_email and is_attending and db_email and not email_sent)
                 will_send_wa = bool(want_wa and is_attending and db_phone and not wa_sent)
-
+                email_ok = False
                 # 5) Perform sends (raise on failure to abort & keep flags unchanged)
                 if will_send_email:
                     ep = data.get("email_payload") or {}
                     # validate required keys for your email helper
-                    required_email_keys = ["guest_name", "venue_name", "venue_address",
+                    required_email_keys = ["venue_name", "venue_address",
                                            "maps_url", "website_url", "guide_url"]
                     missing = [k for k in required_email_keys if not ep.get(k)]
                     if missing:
                         conn.rollback()
                         return jsonify({"error": f"missing_email_payload: {', '.join(missing)}"}), 400
 
-                    send_attendance_email(
-                        to_email=db_email,
-                        guest_name=display_name,
-                        seats=int(seats),
-                        venue_name=ep["venue_name"],
-                        venue_address=ep["venue_address"],
-                        maps_url=ep["maps_url"],
-                        website_url=ep["website_url"],
-                        guide_url=ep["guide_url"],
-                        reply_to=ep.get("reply_to"),
-                        subject=ep.get("subject"),
-                    )
-
+                    try:
+                        _ = send_attendance_email(
+                            to_email=db_email,
+                            guest_name=display_name,
+                            seats=int(seats),
+                            venue_name=ep["venue_name"],
+                            venue_address=ep["venue_address"],
+                            maps_url=ep["maps_url"],
+                            website_url=ep["website_url"],
+                            guide_url=ep["guide_url"],
+                            reply_to=ep.get("reply_to"),
+                            subject=ep.get("subject"),
+                        )
+                        email_ok=True# got past raise_for_status() => 2xx
+                        cur.execute(
+                            "UPDATE guests SET attending_confirmation_sent = TRUE WHERE id = %s",
+                            (guest_id,),
+                        )
+                        conn.commit()
+                    except Exception as e:
+                        conn.rollback()
+                        log.warning("Email failed for %s: %s", db_email, e)
+                        return jsonify({"error": f"{e}"}), 400
+                    
+                wa_ok=False
                 if will_send_wa:
                     wp = data.get("whatsapp_payload") or {}
-                    send_whatsapp(
-                        guest_name=display_name,
-                        phone_number=db_phone,
-                        attending=bool(wp.get("attending", db_attending)),
-                        seats=int(seats),
-                        rsvp_link=wp.get("rsvp_link"),
-                    )
-
-                # 6) Flip flags only for channels we actually sent
-                if will_send_email or will_send_wa:
-                    cur.execute("""
-                        UPDATE guests
-                        SET attending_confirmation_sent = attending_confirmation_sent OR %s,
-                            whatsapp_confirmation_sent   = whatsapp_confirmation_sent   OR %s
-                        WHERE id = %s
-                        RETURNING attending_confirmation_sent, whatsapp_confirmation_sent
-                    """, (will_send_email, will_send_wa, guest_id))
-                    email_sent, wa_sent = cur.fetchone()
+                    try:
+                        send_whatsapp(
+                            guest_name=display_name,
+                            phone_number=db_phone,
+                            attending=bool(wp.get("attending", db_attending)),
+                            seats=int(seats),
+                            rsvp_link=wp.get("rsvp_link"),
+                        )
+                        wa_ok = True
+                        cur.execute(
+                        "UPDATE guests SET whatsapp_confirmation_sent = TRUE WHERE id = %s",
+                        (guest_id,),
+                        )
+                        conn.commit()
+                    except Exception as e:
+                        conn.rollback()
+                        log.warning("WhatsApp failed for %s: %s", db_phone, e)
+                        return jsonify({"error": f"{e}"}), 400
 
             conn.commit()
+            cur.execute("""
+                SELECT attending_confirmation_sent, whatsapp_confirmation_sent
+                FROM guests WHERE id = %s
+            """, (guest_id,))
+            att_sent_db, wa_sent_db = cur.fetchone()
             return jsonify({
                 "id": guest_id,
                 "party_id": party_id,
                 "seats": int(seats),
                 "attending": bool(db_attending),
-                "attending_confirmation_sent": bool(email_sent),
-                "whatsapp_confirmation_sent": bool(wa_sent),
-                "sent": {"email": bool(will_send_email), "whatsapp": bool(will_send_wa)}
+                "attending_confirmation_sent": bool(att_sent_db),
+                "whatsapp_confirmation_sent": bool(wa_sent_db),
+                "sent": {
+                    "email": bool(will_send_email and email_ok),   # sent in this call
+                    "whatsapp": bool(will_send_wa and wa_ok)
+                }
             }), 200
 
         except Exception as e:

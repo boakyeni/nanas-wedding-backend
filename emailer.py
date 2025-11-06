@@ -102,6 +102,6 @@ def send_attendance_email(
     try:
         r.raise_for_status()
     except Exception:
-        print("ZEPTOMAIL ERROR:", r.status_code, r.text)
+        log.error("ZEPTOMAIL ERROR:", r.status_code, r.text)
         raise
     return r.json()
