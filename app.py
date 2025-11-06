@@ -578,40 +578,15 @@ def send_whatsapp_message():
     
 @app.post("/api/guests/<int:guest_id>/send_confirmations")
 def send_confirmations(guest_id: int):
-    """
-    Uses current DB state.
-    Body (all optional):
-    {
-      "email": "optional new email",    # optional contact update
-      "phone": "+15551234567",          # optional contact update
-      "send_email_if_needed": true,
-      "send_whatsapp_if_needed": true,
-
-      "email_payload": {                # required fields for your email sender
-        "guest_name": "...",
-        "venue_name": "...",
-        "venue_address": "...",
-        "maps_url": "...",
-        "website_url": "...",
-        "guide_url": "...",
-        "reply_to": "optional",
-        "subject": "optional"
-      },
-      "whatsapp_payload": {
-        "guest_name": "...",
-        "attending": true,              # defaults to DB value if omitted
-        "rsvp_link": "..."
-      }
-    }
-    """
     log.info("Call made to send confirmations")
     data = request.get_json(force=True, silent=True) or {}
+
+    # ---------------- 1) PREFLIGHT TX: lock, contact update, compute seats, decide sends ----------------
     try:
         conn = get_db_connection()
         conn.autocommit = False
         try:
             with conn.cursor() as cur:
-                # 1) Lock the guest row (we need party_id, contact, flags, plus_one, attending, name)
                 cur.execute("""
                     SELECT party_id, email, phone, plus_one,
                            attending, attending_confirmation_sent, whatsapp_confirmation_sent, display_name
@@ -625,10 +600,9 @@ def send_confirmations(guest_id: int):
                     return jsonify({"error": "guest_not_found"}), 404
 
                 (party_id, db_email, db_phone, plus_one,
-                 db_attending, email_sent, wa_sent,
-                 display_name) = row
+                 db_attending, email_sent, wa_sent, display_name) = row
 
-                # 2) Optional contact update (still under lock)
+                # Optional contact update (still under lock)
                 new_email = data.get("email", "") or db_email
                 new_phone = data.get("phone", "") or db_phone
                 if (new_email != db_email) or (new_phone != db_phone):
@@ -638,131 +612,162 @@ def send_confirmations(guest_id: int):
                         WHERE id = %s
                         RETURNING email, phone
                     """, (new_email, new_phone, guest_id))
-                    row = cur.fetchone()
-                    if not row:
-                        # id didn’t match (shouldn’t happen since you SELECTed earlier)
+                    row2 = cur.fetchone()
+                    if not row2:
                         conn.rollback()
                         return jsonify({"error": "guest_not_found"}), 404
 
-                    db_email, db_phone = row
-                    
-                    if (db_email or "").strip().lower() != (new_email or "").strip().lower() or (db_phone or "").strip() != (new_phone or "").strip():
+                    db_email, db_phone = row2
+                    if (db_email or "").strip().lower() != (new_email or "").strip().lower() or \
+                       (db_phone or "").strip() != (new_phone or "").strip():
                         log.warning("DB data mismatch: new=%r stored=%r", new_email, db_email)
                         conn.rollback()
                         return jsonify({"error": "email_not_saved_correctly"}), 409
 
-                # 3) Compute seats from current DB state
-                #    Party seats: SUM over attending members of (1 + (plus_one?1:0))
+                # Compute seats from current DB state
                 if party_id is not None:
                     cur.execute("""
-                    SELECT id, attending, plus_one
-                    FROM guests
-                    WHERE party_id = %s
-                    FOR UPDATE
+                        SELECT id, attending, plus_one
+                        FROM guests
+                        WHERE party_id = %s
+                        FOR UPDATE
                     """, (party_id,))
                     members = cur.fetchall()
-                    # members: [(id, attending, plus_one), ...]
                     seats = 0
-                    for _, attending, plus_one_m in members:
-                        if attending:
+                    for _, attending_m, plus_one_m in members:
+                        if attending_m:
                             seats += 1 + (1 if plus_one_m else 0)
                 else:
                     seats = (1 + (1 if plus_one else 0)) if db_attending else 0
 
-                # 4) Decide what to send based on flags + contact
+                # Decide what to send
                 want_email = bool(data.get("send_email_if_needed", True))
-                want_wa = bool(data.get("send_whatsapp_if_needed", True))
-
+                want_wa    = bool(data.get("send_whatsapp_if_needed", True))
                 is_attending = bool(db_attending)
 
                 will_send_email = bool(want_email and is_attending and db_email and not email_sent)
-                will_send_wa = bool(want_wa and is_attending and db_phone and not wa_sent)
-                email_ok = False
-                # 5) Perform sends (raise on failure to abort & keep flags unchanged)
-                if will_send_email:
-                    ep = data.get("email_payload") or {}
-                    # validate required keys for your email helper
-                    required_email_keys = ["venue_name", "venue_address",
-                                           "maps_url", "website_url", "guide_url"]
-                    missing = [k for k in required_email_keys if not ep.get(k)]
-                    if missing:
-                        conn.rollback()
-                        return jsonify({"error": f"missing_email_payload: {', '.join(missing)}"}), 400
+                will_send_wa    = bool(want_wa    and is_attending and db_phone and not wa_sent)
 
-                    try:
-                        _ = send_attendance_email(
-                            to_email=db_email,
-                            guest_name=display_name,
-                            seats=int(seats),
-                            venue_name=ep["venue_name"],
-                            venue_address=ep["venue_address"],
-                            maps_url=ep["maps_url"],
-                            website_url=ep["website_url"],
-                            guide_url=ep["guide_url"],
-                            reply_to=ep.get("reply_to"),
-                            subject=ep.get("subject"),
-                        )
-                        email_ok=True# got past raise_for_status() => 2xx
-                        cur.execute(
-                            "UPDATE guests SET attending_confirmation_sent = TRUE WHERE id = %s",
-                            (guest_id,),
-                        )
-                        conn.commit()
-                    except Exception as e:
-                        conn.rollback()
-                        log.warning("Email failed for %s: %s", db_email, e)
-                        return jsonify({"error": f"{e}"}), 400
-                    
-                wa_ok=False
-                if will_send_wa:
-                    wp = data.get("whatsapp_payload") or {}
-                    try:
-                        send_whatsapp(
-                            guest_name=display_name,
-                            phone_number=db_phone,
-                            attending=bool(wp.get("attending", db_attending)),
-                            seats=int(seats),
-                            rsvp_link=wp.get("rsvp_link"),
-                        )
-                        wa_ok = True
-                        cur.execute(
-                        "UPDATE guests SET whatsapp_confirmation_sent = TRUE WHERE id = %s",
-                        (guest_id,),
-                        )
-                        conn.commit()
-                    except Exception as e:
-                        conn.rollback()
-                        log.warning("WhatsApp failed for %s: %s", db_phone, e)
-                        return jsonify({"error": f"{e}"}), 400
+                # Snapshot for use after we release locks
+                preflight = dict(
+                    party_id=party_id,
+                    db_email=db_email,
+                    db_phone=db_phone,
+                    db_attending=db_attending,
+                    display_name=display_name,
+                    seats=int(seats),
+                    will_send_email=will_send_email,
+                    will_send_wa=will_send_wa,
+                )
 
+            # Release locks before any external calls
             conn.commit()
-            cur.execute("""
-                SELECT attending_confirmation_sent, whatsapp_confirmation_sent
-                FROM guests WHERE id = %s
-            """, (guest_id,))
-            att_sent_db, wa_sent_db = cur.fetchone()
-            return jsonify({
-                "id": guest_id,
-                "party_id": party_id,
-                "seats": int(seats),
-                "attending": bool(db_attending),
-                "attending_confirmation_sent": bool(att_sent_db),
-                "whatsapp_confirmation_sent": bool(wa_sent_db),
-                "sent": {
-                    "email": bool(will_send_email and email_ok),   # sent in this call
-                    "whatsapp": bool(will_send_wa and wa_ok)
-                }
-            }), 200
-
         except Exception as e:
             conn.rollback()
             return jsonify({"error": str(e)}), 500
         finally:
             conn.autocommit = True
             conn.close()
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+    # ---------------- 2) SIDE EFFECTS (no transaction active) ----------------
+    email_ok = False
+    wa_ok = False
+
+    if preflight["will_send_email"]:
+        ep = data.get("email_payload") or {}
+        required_email_keys = ["venue_name", "venue_address", "maps_url", "website_url", "guide_url"]
+        missing = [k for k in required_email_keys if not ep.get(k)]
+        if missing:
+            return jsonify({"error": f"missing_email_payload: {', '.join(missing)}"}), 400
+        try:
+            _ = send_attendance_email(
+                to_email=preflight["db_email"],
+                guest_name=preflight["display_name"],
+                seats=preflight["seats"],
+                venue_name=ep["venue_name"],
+                venue_address=ep["venue_address"],
+                maps_url=ep["maps_url"],
+                website_url=ep["website_url"],
+                guide_url=ep["guide_url"],
+                reply_to=ep.get("reply_to"),
+                subject=ep.get("subject"),
+            )
+            email_ok = True
+        except Exception as e:
+            log.warning("Email failed for %s: %s", preflight["db_email"], e)
+
+    if preflight["will_send_wa"]:
+        wp = data.get("whatsapp_payload") or {}
+        try:
+            send_whatsapp(
+                guest_name=preflight["display_name"],
+                phone_number=preflight["db_phone"],
+                attending=bool(wp.get("attending", preflight["db_attending"])),
+                seats=preflight["seats"],
+                rsvp_link=wp.get("rsvp_link"),
+            )
+            wa_ok = True
+        except Exception as e:
+            log.warning("WhatsApp failed for %s: %s", preflight["db_phone"], e)
+
+    # ---------------- 3) FINALIZE TX: flip flags based on actual success ----------------
+    try:
+        conn = get_db_connection()
+        conn.autocommit = False
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE guests
+                    SET attending_confirmation_sent = attending_confirmation_sent OR %s,
+                        whatsapp_confirmation_sent   = whatsapp_confirmation_sent   OR %s
+                    WHERE id = %s
+                    RETURNING attending_confirmation_sent, whatsapp_confirmation_sent
+                """, (bool(email_ok), bool(wa_ok), guest_id))
+                row = cur.fetchone()
+                if not row:
+                    conn.rollback()
+                    return jsonify({"error": "guest_not_found"}), 404
+                att_sent_db, wa_sent_db = row
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            return jsonify({"error": str(e)}), 500
+        finally:
+            conn.autocommit = True
+            conn.close()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    # ---------------- Decide status code ----------------
+    # Fail (400) if any channel that we *intended* to send did not actually send.
+    failed = []
+    if preflight["will_send_email"] and not email_ok:
+        failed.append("email")
+    if preflight["will_send_wa"] and not wa_ok:
+        failed.append("whatsapp")
+
+    payload = {
+        "id": guest_id,
+        "party_id": preflight["party_id"],
+        "seats": preflight["seats"],
+        "attending": bool(preflight["db_attending"]),
+        "attending_confirmation_sent": bool(att_sent_db),
+        "whatsapp_confirmation_sent": bool(wa_sent_db),
+        "sent": {
+            "email": bool(email_ok),
+            "whatsapp": bool(wa_ok),
+        },
+        "failed": failed,  # helpful to the frontend
+    }
+
+    if failed:
+        # Return 400 so the frontend can re-enable the button and retry just the failed channel(s).
+        return jsonify({"error": "partial_failure", **payload}), 400
+
+    return jsonify(payload), 200
+
 
 
 
