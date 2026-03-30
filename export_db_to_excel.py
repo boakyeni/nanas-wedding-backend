@@ -50,6 +50,9 @@ def main():
         for table in tables:
             query = sql.SQL("SELECT * FROM {}").format(sql.Identifier(table))
             df = pd.read_sql(query.as_string(conn), conn)
+            # Excel doesn't support timezone-aware datetimes — strip tz info
+            for col in df.select_dtypes(include=["datetimetz"]).columns:
+                df[col] = df[col].dt.tz_localize(None)
             sheet_name = table[:31]  # Excel sheet names max 31 chars
             df.to_excel(writer, sheet_name=sheet_name, index=False)
             print(f"  Wrote '{sheet_name}' ({len(df)} rows, {len(df.columns)} cols)")
